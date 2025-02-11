@@ -1,46 +1,45 @@
-name: Build with Conan Toolchain
+# GitHub Actions pipeline configuration
+name: Build and Test Conan Project
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
+    - name: Checkout Code
+      uses: actions/checkout@v3
 
-    - name: Install Dependencies for Conan
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+
+    - name: Install Dependencies
       run: |
-        sudo apt-get update
-        sudo apt-get install -y python3-pip python3-setuptools python3-wheel build-essential
+        pip3 install --upgrade pip setuptools wheel cython
+        pip3 install "conan==2.0.0" "pyyaml<=6.0"
 
-    - name: Install Conan
-      run: pip3 install "conan==2.0.0" "pyyaml<=6.0"
-
-    - name: Create Conan Default Profile
+    - name: Run Conan Install
       run: |
         conan profile detect
-        conan profile update settings.compiler.version=12 default
+        conan install . --build=missing
 
-    - name: Cache Conan Dependencies
-      uses: actions/cache@v2
-      with:
-        path: ~/.conan
-        key: ${{ runner.os }}-conan-${{ hashFiles('conanfile.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-conan
-
-    - name: Create Toolchain Package
-      run: |
-        cd toolchain
-        conan create . --name=toolchain --version=1.0 --user=user --channel=testing \
-          -s compiler=gcc -s compiler.version=12 -s compiler.libcxx=libstdc++11
-
-    - name: Install Dependencies and Build
+    - name: Build Project
       run: |
         mkdir -p build
         cd build
-        conan install .. --profile ../profiles/gcc_profile
-        cmake .. -DCMAKE_BUILD_TYPE=Release
+        cmake ..
         cmake --build .
+
+    - name: Run Tests
+      run: |
+        cd build
+        ctest --output-on-failure
