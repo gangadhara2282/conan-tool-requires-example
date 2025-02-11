@@ -29,6 +29,9 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-conan
 
+    - name: Detect Conan Profile
+      run: conan profile detect --force
+
     - name: Create Toolchain Package
       run: |
         cd toolchain
