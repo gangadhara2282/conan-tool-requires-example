@@ -1,0 +1,27 @@
+name: Build with Conan Toolchain
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Install Conan
+      run: pip install conan
+
+    - name: Create Toolchain Package
+      run: |
+        cd toolchain
+        conan create . user/testing
+
+    - name: Install Dependencies and Build
+      run: |
+        mkdir -p build
+        cd build
+        conan install ..
+        cmake .. -DCMAKE_BUILD_TYPE=Release
+        cmake --build .
