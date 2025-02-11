@@ -11,17 +11,25 @@ jobs:
       uses: actions/checkout@v2
 
     - name: Install Conan
-      run: pip install conan
+      run: pip install conan==2.0.0
+
+    - name: Cache Conan Dependencies
+      uses: actions/cache@v2
+      with:
+        path: ~/.conan
+        key: ${{ runner.os }}-conan-${{ hashFiles('conanfile.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-conan
 
     - name: Create Toolchain Package
       run: |
         cd toolchain
-        conan create . user/testing
+        conan create . --name=toolchain --version=1.0 --user=user --channel=testing
 
     - name: Install Dependencies and Build
       run: |
         mkdir -p build
         cd build
-        conan install ..
+        conan install .. --profile ../profiles/gcc_profile
         cmake .. -DCMAKE_BUILD_TYPE=Release
         cmake --build .
