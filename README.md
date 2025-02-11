@@ -7,3 +7,7 @@ $git config --global --add safe.directory /home/pgr/Desktop/conan-tool-requires-
 ---Ensure the directory ownership is correct:
 $sudo chown -R $USER:$USER /home/pgr/Desktop/conan-tool-requires-example
 --Avoid using sudo with Git to prevent permission conflicts.
+
+
+
+
