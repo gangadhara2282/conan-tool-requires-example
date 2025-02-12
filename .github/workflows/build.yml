@@ -1,38 +1,59 @@
 # GitHub Actions pipeline configuration
-name: Build and Test Conan Project using Docker
+name: Build with Conan Toolchain
 
-on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+on: [push, pull_request]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Code
+    - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Set up Docker
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y docker.io
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
 
-    - name: Build and Test in Docker Container
+    - name: Create Virtual Environment
       run: |
-        docker run --rm -v "${{ github.workspace }}:/workspace" -w /workspace ubuntu:20.04 /bin/bash -c "\
-          apt-get update && \
-          apt-get install -y python3 python3-pip cmake build-essential && \
-          pip3 install --upgrade pip setuptools wheel cython && \
-          pip3 install \"conan==2.0.0\" \"pyyaml<=6.0\" && \
-          conan profile detect && \
-          conan install . --build=missing && \
-          mkdir -p build && \
-          cd build && \
-          cmake .. && \
-          cmake --build . && \
-          ctest --output-on-failure"
+        python -m venv venv
+        source venv/bin/activate
+
+    - name: Install Conan and Dependencies
+      run: |
+        source venv/bin/activate
+        pip install --upgrade pip setuptools wheel cython
+        pip install "conan==2.0.0" "pyyaml<=6.0"
+
+    - name: Create Conan Default Profile
+      run: |
+        source venv/bin/activate
+        conan profile detect --force
+        conan profile update settings.compiler=gcc default
+        conan profile update settings.compiler.version=10 default
+        conan profile update settings.compiler.libcxx=libstdc++11 default
+
+    - name: Cache Conan Dependencies
+      uses: actions/cache@v2
+      with:
+        path: ~/.conan2
+        key: ${{ runner.os }}-conan-${{ hashFiles('conanfile.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-conan
+
+    - name: Create Toolchain Package
+      run: |
+        source venv/bin/activate
+        cd toolchain
+        conan create . --name=toolchain --version=1.0 --user=user --channel=testing --profile default
+
+    - name: Install Dependencies and Build
+      run: |
+        source venv/bin/activate
+        mkdir -p build
+        cd build
+        conan install .. --profile ../profiles/gcc_profile
+        cmake .. -DCMAKE_BUILD_TYPE=Release
+        cmake --build .
