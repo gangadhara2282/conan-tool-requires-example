@@ -1,59 +1,58 @@
-# GitHub Actions pipeline configuration
-name: Build with Conan Toolchain
-
-on: [push, pull_request]
-
+on: [push, pull_request, workflow_dispatch]
 jobs:
-  build:
-    runs-on: ubuntu-latest
-
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-2019, macos-13, ubuntu-latest]
+        include:
+          - os: windows-2019
+          - os: macos-13
+          - os: ubuntu-latest
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.x'
-
-    - name: Create Virtual Environment
-      run: |
-        python -m venv venv
-        source venv/bin/activate
-
-    - name: Install Conan and Dependencies
-      run: |
-        source venv/bin/activate
-        pip install --upgrade pip setuptools wheel cython
-        pip install "conan==2.0.0" "pyyaml<=6.0"
-
-    - name: Create Conan Default Profile
-      run: |
-        source venv/bin/activate
-        conan profile detect --force
-        conan profile update settings.compiler=gcc default
-        conan profile update settings.compiler.version=10 default
-        conan profile update settings.compiler.libcxx=libstdc++11 default
-
-    - name: Cache Conan Dependencies
-      uses: actions/cache@v2
-      with:
-        path: ~/.conan2
-        key: ${{ runner.os }}-conan-${{ hashFiles('conanfile.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-conan
-
-    - name: Create Toolchain Package
-      run: |
-        source venv/bin/activate
-        cd toolchain
-        conan create . --name=toolchain --version=1.0 --user=user --channel=testing --profile default
-
-    - name: Install Dependencies and Build
-      run: |
-        source venv/bin/activate
-        mkdir -p build
-        cd build
-        conan install .. --profile ../profiles/gcc_profile
-        cmake .. -DCMAKE_BUILD_TYPE=Release
-        cmake --build .
+      - uses: actions/checkout@v3.5.2
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64
+        if: ${{ matrix.os == 'windows-2019' }}
+        name: setup msvc vcvars
+      - name: Setup Python
+        uses: actions/setup-python@v4.6.0
+        with:
+          python-version: "3.10"
+      - name: Install autotools on macOS
+        run: brew install automake
+        if: ${{ matrix.os == 'macos-13' }}
+      - name: Install Conan
+        run: pip install conan pytest && conan --version
+      - name: Setup CMake and Ninja
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: "~3.25.0"
+          ninjaVersion: "^1.11.1"
+      - name: Run Tests
+        run: pytest -rA -v
+  example:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3.5.2
+      - name: Setup Python
+        uses: actions/setup-python@v4.6.0
+        with:
+          python-version: "3.10"
+      - name: Install Conan
+        run: pip install conan && conan --version
+      - name: Setup CMake and Ninja
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: "~3.25.0"
+          ninjaVersion: "^1.11.1"
+      - name: Configure CMake
+        run: cmake -B build -S . -DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=../conan_provider.cmake -DCMAKE_BUILD_TYPE=Release
+        working-directory: example
+      - name: Build example
+        run: cmake --build build
+        working-directory: example
+      - name: Run example
+        run: build/main
+        working-directory: example
